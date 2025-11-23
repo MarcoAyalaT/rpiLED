@@ -62,8 +62,6 @@ public:
   ClassDef(Pulse,1);
 };
 
-// Eliminamos la función analyzeWaveform que causaba problemas
-
 void PMT_raw_to_root3(int dataSampleID, int waveformToAnalyze = 4){
 
 // -----------------------
@@ -88,13 +86,11 @@ void PMT_raw_to_root3(int dataSampleID, int waveformToAnalyze = 4){
 // ----------output root file-------------
    const char* outputFile;
 
-   // Corregido: Eliminar main_file de la ruta de salida
    string main_file_output = Form("ROOTtrees/");
    std::string const myString{main_file_output+sample[dataSampleID]+".root"};
    outputFile = myString.c_str();    
 // -----------------------
    
-   // Crear el directorio ROOTtrees si no existe
    system("mkdir -p ROOTtrees");
 
     /// tree definitions
@@ -122,7 +118,6 @@ void PMT_raw_to_root3(int dataSampleID, int waveformToAnalyze = 4){
        exit(1);
     }    
     
-    // Mejorado: Manejar errores durante la lectura del CSV
     if(file.is_open()){
         bool first_line = true;
         while(getline(file, line)){
@@ -132,28 +127,25 @@ void PMT_raw_to_root3(int dataSampleID, int waveformToAnalyze = 4){
                 row.push_back(data);
             }
             
-            // Si es la primera línea, inicializar el vector de columnas
             if (first_line) {
                 for (size_t i = 0; i < row.size(); i++) {
                     Data.push_back(vector<double>());
                 }
                 first_line = false;
             }
-            
-            // Guardar todos los datos
+
             for (size_t i = 0; i < row.size() && i < Data.size(); i++) {
                 try {
                     double val = stod(row[i]);
                     Data[i].push_back(val);
                 } catch(const std::exception& e) {
                     cout << "Error converting value in CSV at column " << i << endl;
-                    Data[i].push_back(0.0); // Valor por defecto
+                    Data[i].push_back(0.0); 
                 }
             }
         }
     }
     
-    // Verificar que tenemos suficientes columnas
     if (Data.size() < 2) {
         cout << "Error: File does not have enough columns" << endl;
         return;
@@ -164,7 +156,6 @@ void PMT_raw_to_root3(int dataSampleID, int waveformToAnalyze = 4){
     cout << "number of data points = " << graph_size << endl;
     cout << "number of columns = " << Data.size() << endl;
     
-    // Determinar qué columnas tienen datos reales (detectando variación)
     vector<int> validColumns;
     for (size_t col = 1; col < Data.size(); col++) {
         double min_val = 1e9, max_val = -1e9;
@@ -173,7 +164,6 @@ void PMT_raw_to_root3(int dataSampleID, int waveformToAnalyze = 4){
             if (Data[col][i] > max_val) max_val = Data[col][i];
         }
         
-        // Si hay variación significativa, considerar válida
         if (max_val - min_val > 0.0001) {
             validColumns.push_back(col);
             cout << "Valid column detected: " << col << endl;
@@ -203,10 +193,8 @@ void PMT_raw_to_root3(int dataSampleID, int waveformToAnalyze = 4){
 
     float fBase[nChannels];     // average baseline determined beforehand
 
-    // Mantener las ventanas de tiempo como en el original
     iBLfrom[0] = 0;  iBLto[0] = 0.20e-6/bin_width;  iPULSEfrom[0] = 0.223e-6/bin_width;  iPULSEto[0] = 0.25e-6/bin_width;   
     
-    // Validar que los índices estén dentro de los límites
     if (iBLto[0] >= bins_per_record) iBLto[0] = bins_per_record - 1;
     if (iPULSEfrom[0] >= bins_per_record) iPULSEfrom[0] = bins_per_record - 1;
     if (iPULSEto[0] >= bins_per_record) iPULSEto[0] = bins_per_record - 1;    
@@ -217,13 +205,12 @@ void PMT_raw_to_root3(int dataSampleID, int waveformToAnalyze = 4){
       int columnToAnalyze = validColumns[i];
       // Llenar histograma con la forma de onda seleccionada
       for (int j = 0; j < bins_per_record && j < (int)Data[columnToAnalyze].size(); j++) {
-        h_WF0->SetBinContent(j+1, Data[columnToAnalyze][j]);  // Bins empiezan en 1
+        h_WF0->SetBinContent(j+1, Data[columnToAnalyze][j]);
         if (j < bins_per_record) {
             fWaveForm.data[j] = Data[columnToAnalyze][j];
         }
       }
     
-      // Procesar el pulso para la forma de onda seleccionada - USANDO LAS FUNCIONES ORIGINALES
       fBase[iCh] = GetBaseLine(pfWaveForm[iCh], iBLfrom[iCh], iBLto[iCh]);
       pPulse[iCh]->fBase = fBase[iCh];
       SubtractBaseLine(pfWaveForm[iCh], pfWaveFormBL[iCh], fBase[iCh]);
@@ -239,7 +226,6 @@ void PMT_raw_to_root3(int dataSampleID, int waveformToAnalyze = 4){
     }
     cout << "Analysis finished. Total waveforms processed: " << validColumns.size() << endl;
     
-    // Crear el histograma de persistencia mejorado
     TString hName, hTitle;
     hName  = "hPers_"+sample[dataSampleID];
     hTitle = "Persistance "+sample[dataSampleID];
@@ -247,7 +233,6 @@ void PMT_raw_to_root3(int dataSampleID, int waveformToAnalyze = 4){
                             bins_per_record, 0, bin_width*bins_per_record,
                             1000, -1.3, .05);
     
-    // Llenar el histograma de persistencia con TODAS las formas de onda válidas
     for (size_t col_idx = 0; col_idx < validColumns.size(); col_idx++) {
         int col = validColumns[col_idx];
         for (int j = 0; j < bins_per_record && j < (int)Data[col].size(); j++) {
@@ -256,33 +241,27 @@ void PMT_raw_to_root3(int dataSampleID, int waveformToAnalyze = 4){
     }
 
 
-    
-    // Debug información
     cout << "Time 0,0=" << Data[0][0] << endl;
     cout << "Time 0,1=" << Data[0][1] << endl;
     cout << "Time 0,2=" << Data[0][2] << endl;
     cout << "Time bin width=" << Data[0][1] - Data[0][0] << endl; 
   
-    // Llenar el histograma con la forma de onda procesada
     for (int j = 0; j < bins_per_record; j++) {
         h_WF1->SetBinContent(j+1, fWaveFormBL.data[j]);
     }
 
-    // *** CREAR MULTIGRÁFICO SOLO CON COLUMNAS VÁLIDAS ***
     TMultiGraph *mg = new TMultiGraph();
     mg->SetTitle("Todas las formas de onda;Tiempo (s);Voltaje (V)");
     
-    // Limitar a 10 para mantener claridad visual
     int maxToShow = min(10, (int)validColumns.size());
     
-    // Crear un gráfico para cada forma de onda válida
     for (int i = 0; i < maxToShow; i++) {
         int col = validColumns[i];
         
         TGraph *gr = new TGraph(Data[0].size());
         
         for (size_t j = 0; j < Data[0].size(); j++) {
-            gr->SetPoint(j, Data[0][j], Data[col][j]); // Tiempo real, Voltaje
+            gr->SetPoint(j, Data[0][j], Data[col][j]);
         }
         
         gr->SetLineColor(i+1); // Diferentes colores (evita el blanco)
@@ -295,17 +274,14 @@ void PMT_raw_to_root3(int dataSampleID, int waveformToAnalyze = 4){
         gr->SetName(graphName);
         gr->SetTitle(graphName);
         
-        mg->Add(gr, "l"); // "l" para dibujar como línea
+        mg->Add(gr, "l");
     }
     
-    // Guardar todos los objetos en el archivo ROOT
     auto f = TFile::Open(outputFile, "RECREATE");
     tTree.Write();
     
-    // Guardar el multigráfico
     mg->Write("AllWaveforms");
     
-    // También guardar cada gráfico individual del multigráfico
     TList *graphList = mg->GetListOfGraphs();
     if (graphList) {
         TIter next(graphList);
@@ -318,13 +294,11 @@ void PMT_raw_to_root3(int dataSampleID, int waveformToAnalyze = 4){
     h_WFPer->Write();
     h_WF0->Write();
     h_WF1->Write();
-    
-    // Crear un canvas para mostrar todas las formas de onda claramente
+
     TCanvas *c1 = new TCanvas("c_waveforms", "All Waveforms", 1200, 800);
     mg->Draw("AL");
     gPad->SetGrid();
     
-    // Añadir leyenda
     TLegend *leg = new TLegend(0.7, 0.7, 0.9, 0.9);
     if (graphList) {
         TIter next2(graphList);
@@ -337,7 +311,6 @@ void PMT_raw_to_root3(int dataSampleID, int waveformToAnalyze = 4){
     
     c1->Write();
     
-    // Canvas para h_WF0 y h_WF1 juntos
     TCanvas *c2 = new TCanvas("c_analysis", "Waveform Analysis", 1200, 600);
     c2->Divide(2,1);
     c2->cd(1);
@@ -348,7 +321,6 @@ void PMT_raw_to_root3(int dataSampleID, int waveformToAnalyze = 4){
     gPad->SetGrid();
     c2->Write();
     
-    // Canvas para el histograma de persistencia
     TCanvas *c3 = new TCanvas("c_persistence", "Persistence Plot", 1000, 800);
     h_WFPer->Draw("COLZ");
     gPad->SetGrid();
